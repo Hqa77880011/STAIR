@@ -104,6 +104,58 @@ restored.load_state_dict(weights[0])
 restored.eval()
 assert torch.isfinite(restored(inp)).all()
 plot(OUT / "comparison.json", OUT / "figures")
+# The published larger architecture is an actual trainable choice, not an alias.
+resnet = cli.build_model(1, 3, "resnet18")
+resnet.train()
+gray = torch.randn(4, 1, 32, 32)
+key_names = ["conv1.weight", "layer4.1.conv2.weight", "fc.weight"]
+previous = {k: dict(resnet.named_parameters())[k].detach().clone() for k in key_names}
+objective = torch.nn.functional.cross_entropy(resnet(gray), torch.tensor([0, 1, 2, 0]))
+assert torch.isfinite(objective)
+objective.backward()
+for name in key_names:
+    gradient = dict(resnet.named_parameters())[name].grad
+    assert (
+        gradient is not None
+        and torch.isfinite(gradient).all()
+        and gradient.abs().sum() > 0
+    )
+torch.optim.SGD(resnet.parameters(), lr=0.01).step()
+assert all(
+    not torch.equal(previous[k], dict(resnet.named_parameters())[k]) for k in key_names
+)
+resnet.eval()
+expected = resnet(gray).detach()
+torch.save(resnet.state_dict(), OUT / "resnet_probe.pt")
+loaded = cli.build_model(1, 3, "resnet18")
+loaded.load_state_dict(torch.load(OUT / "resnet_probe.pt", weights_only=True))
+loaded.eval()
+torch.testing.assert_close(expected, loaded(gray), rtol=1e-6, atol=1e-7)
+# Read real LEAF-shaped user shards and bin hand-computable contact intervals.
+import prepare_leaf
+import prepare_contacts
+
+leaf = {
+    "users": ["u0", "u1"],
+    "user_data": {
+        u: {
+            "x": [([0.25] * 784), ([0.75] * 784), ([0.1] * 784), ([0.9] * 784)],
+            "y": [0, 1, 0, 1],
+        }
+        for u in ["u0", "u1"]
+    },
+}
+save(OUT / "leaf_train.json", leaf)
+save(OUT / "leaf_test.json", leaf)
+prepared = prepare_leaf.convert(
+    [OUT / "leaf_train.json"], [OUT / "leaf_test.json"], OUT / "leaf.npz"
+)
+assert prepared["clients"] == 2 and np.load(OUT / "leaf.npz")["x"].shape == (8, 28, 28)
+(OUT / "raw_contacts.csv").write_text(
+    "sender,receiver,start,end\nA,B,0,2\nB,C,1.5,2.5\n", encoding="utf-8"
+)
+prepare_contacts.convert(OUT / "raw_contacts.csv", OUT / "binned.json", 3, 3, 1.0)
+assert load(OUT / "binned.json") == [[[0, 1]], [[0, 1], [1, 2]], [[1, 2]]]
 print(
-    "PASS STAIR: matching/debt hand case, NPZ preparation, finite loss/all gradients/updates, save-load eval equality, 5 train/eval methods, metric aggregation and plots"
+    "PASS STAIR: matching/debt hand case, NPZ preparation, finite loss/all gradients/updates, save-load eval equality, 5 train/eval methods, metric aggregation, ResNet18 gradients/reload, LEAF/contact conversion and plots"
 )

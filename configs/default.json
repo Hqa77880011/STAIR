@@ -1,5 +1,6 @@
 {
   "dataset": "cifar10",
+  "architecture": "small_cnn",
   "clients": 20,
   "rounds": 200,
   "local_epochs": 1,

@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.models import resnet18
 from .common import load, save, table, plot
 from .core import allocation
 
@@ -30,6 +31,18 @@ class Network(nn.Module):
         return self.layers(x)
 
 
+def build_model(channels, classes, architecture="small_cnn"):
+    """Build the small CNN or an unpretrained CIFAR/FEMNIST ResNet-18."""
+    if architecture == "small_cnn":
+        return Network(channels, classes)
+    if architecture == "resnet18":
+        model = resnet18(weights=None, num_classes=classes)
+        model.conv1 = nn.Conv2d(channels, 64, 3, stride=1, padding=1, bias=False)
+        model.maxpool = nn.Identity()
+        return model
+    raise ValueError("Unknown model architecture: " + architecture)
+
+
 def prepare(a, c):
     root = Path(a.data)
     root.mkdir(parents=True, exist_ok=True)
@@ -42,6 +55,8 @@ def prepare(a, c):
             data["test_client"],
         )
     else:
+        if c["dataset"] not in ("cifar10", "cifar100"):
+            raise ValueError("Use --input with converted NPZ for non-CIFAR datasets")
         dataset = CIFAR10 if c["dataset"] == "cifar10" else CIFAR100
         tr = dataset(root / "raw", train=True, download=True)
         te = dataset(root / "raw", train=False, download=True)
@@ -118,7 +133,11 @@ def run(a, c, method):
     test = images("test_x")
     y = torch.from_numpy(data["y"].astype("int64"))
     test_y = data["test_y"]
-    prototype = Network(x.shape[1], int(y.max()) + 1).to(device)
+    prototype = build_model(
+        x.shape[1],
+        c.get("classes", int(y.max()) + 1),
+        c.get("architecture", "small_cnn"),
+    ).to(device)
     models = [deepcopy(prototype) for _ in range(n)]
     fit = []
     probes = []

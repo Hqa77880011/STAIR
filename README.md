@@ -53,9 +53,9 @@ stair plot --output runs
 | Accuracy, bottom-decile accuracy, P95 missed eligible opportunities, harmful exchanges and model bytes | `cli.run` | `stair train/compare --config configs/default.json --data data/clients --output runs` |
 | Random/age/no-debt/no-novelty controls and visualization | `cli.run`, `common.plot` | `stair compare ...`; `stair plot --output runs` |
 
-`--input` images are uint8 NHWC (or NHW grayscale); preparation reserves 10% of each client's training samples for private validation and keeps supplied test samples separate. Only private validation probes update recovery/usefulness; test labels are used after training for metrics. `Network` is a small GroupNorm CNN. A provenance vector tracks per-origin local-update timestamps, and novelty is the fraction of origins newer at the sender. Failed transfers consume attempted model bytes, reset allocation debt, and leave model parameters unchanged. Harmful-exchange rate counts directed successful received updates whose private probe loss rises beyond `loss_tolerance`; the denominator is two per successful pair. P95 runs count missed eligible opportunities since service, pausing when ineligible, and include unfinished runs. Bottom decile averages the worst `ceil(0.1 * clients)` client accuracies.
+`--input` images are uint8 NHWC (or NHW grayscale); preparation reserves 10% of each client's training samples for private validation and keeps supplied test samples separate. Only private validation probes update recovery/usefulness; test labels are used after training for metrics. `architecture` selects `small_cnn` (the small GroupNorm CNN) or `resnet18` (torchvision ResNet-18 with a 3x3 stride-1 stem and no initial max-pool, no pretrained weights). ResNet batch-normalization buffers remain client-local during pairwise parameter mixing and are included in saved state dictionaries; this is an explicit normalization choice because the paper does not specify buffer mixing. A provenance vector tracks per-origin local-update timestamps, and novelty is the fraction of origins newer at the sender. Failed transfers consume attempted model bytes, reset allocation debt, and leave model parameters unchanged. Harmful-exchange rate counts directed successful received updates whose private probe loss rises beyond `loss_tolerance`; the denominator is two per successful pair. P95 runs count missed eligible opportunities since service, pausing when ineligible, and include unfinished runs. Bottom decile averages the worst `ceil(0.1 * clients)` client accuracies.
 
-All methods use the same rounds, input partitions, contacts, local optimizer and mixing rule. `model_byte_budget` is a hard upper bound, not an automatic matched-byte scheduler; do not claim a matched-byte comparison when output byte totals differ. CIFAR download and grouped NPZ imports are supported. FEMNIST/LEAF and CRAWDAD preprocessing, ResNet-18 and published D-FedAvg/MATCHA/RelaySum optimizers are not bundled. Internal controls and generated smoke images do not reproduce those benchmarks or the paper's reported numbers.
+All methods use the same rounds, input partitions, contacts, local optimizer and mixing rule. `model_byte_budget` is a hard upper bound, not an automatic matched-byte scheduler; do not claim a matched-byte comparison when output byte totals differ. CIFAR download and grouped NPZ imports are supported. LEAF/FEMNIST and normalized proximity-contact conversion commands are provided below. Published D-FedAvg/MATCHA/RelaySum optimizers are not bundled. Internal controls and generated smoke images do not reproduce those benchmarks or the paper's reported numbers.
 
 ## Functional validation
 
@@ -70,3 +70,21 @@ The check uses a fixed seed (17), small generated inputs, the real data preparat
 The validation also checks finite cross-entropy, gradients and actual updates of every CNN parameter, two-round client training, and checkpoint reload equality for the same input in `eval()` mode.
 
 Actual validation environment: Windows, Python 3.13.5; numpy 2.1.3, scipy 1.15.3, matplotlib 3.10.0, torch 2.7.1+cu118 (CPU checks), torchvision 0.22.1. On 2026-11-01, `python scripts/validate.py` passed; the distributed implementation and new functional checks do not establish the paper's reported performance.
+
+## FEMNIST and contact-trace conversion
+
+Standard LEAF shards contain `user_data[writer_id].x` (flattened 28x28 pixels in `[0,1]`) and `.y`. Writer identities remain client groups; conversion keeps writers present in both official train and test shards, stores the exact IDs in `client_ids`, and does not draw a new test split. Subsequent `prepare` reserves validation only from each writer's training samples. Set `clients` to the converter's reported count and `dataset` to `femnist` in your config.
+
+```bash
+python scripts/prepare_leaf.py --train path/to/train-shard.json --test path/to/test-shard.json --output data/femnist.npz
+stair prepare --config configs/femnist.json --input data/femnist.npz --contacts data/contacts.json --data data/femnist
+stair train --config configs/femnist.json --data data/femnist --output runs/femnist
+```
+
+For CRAWDAD or another trace, first express its documented native columns as CSV `sender,receiver,start,end` in seconds. The converter bins half-open contact intervals by overlap; IDs are assigned in sorted order unless `--nodes nodes.json` supplies the exact raw node assigned to each client. The generated `.nodes.json` records that mapping. This explicit normalized input avoids guessing a raw trace's column order/time units.
+
+```bash
+python scripts/prepare_contacts.py --input data/contact_intervals.csv --output data/contacts.json --clients 20 --rounds 200 --round-seconds 60 --nodes data/nodes.json
+```
+
+Set `architecture` to `resnet18` in a config to use the larger model. The functional check executes a real ResNet-18 forward/backward/SGD step, checks nonzero finite stem/final-block/classifier gradients, and verifies evaluation output after full state reload. It also reads miniature LEAF-shaped shards and verifies exact contact-bin boundaries. No original FEMNIST or CRAWDAD trace was downloaded or evaluated in this check.
