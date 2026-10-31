@@ -1,0 +1,6 @@
+[submodule "upstream/relaysgd"]
+	path = upstream/relaysgd
+	url = https://github.com/epfml/relaysgd.git
+[submodule "upstream/MATCHA"]
+	path = upstream/MATCHA
+	url = https://github.com/JYWa/MATCHA.git

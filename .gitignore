@@ -18,3 +18,4 @@ dist/
 *.npy
 *.pdf
 *.log
+.deps/
