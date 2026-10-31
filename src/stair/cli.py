@@ -43,6 +43,26 @@ def build_model(channels, classes, architecture="small_cnn"):
     raise ValueError("Unknown model architecture: " + architecture)
 
 
+def imported_matching(round_edges, contacts, clients):
+    """Validate external capacity-one pairings against realized physical contacts."""
+    selected = []
+    used = set()
+    physical = {tuple(sorted(edge)) for edge in contacts}
+    for pair in round_edges:
+        if len(pair) != 2 or any(
+            not isinstance(i, int) or not 0 <= i < clients for i in pair
+        ):
+            raise ValueError("External pairings require two valid client indices")
+        edge = tuple(sorted(pair))
+        if edge[0] == edge[1] or edge not in physical or set(edge) & used:
+            raise ValueError(
+                "External schedule must be a physical capacity-one matching"
+            )
+        selected.append(edge)
+        used.update(edge)
+    return selected
+
+
 def prepare(a, c):
     root = Path(a.data)
     root.mkdir(parents=True, exist_ok=True)
@@ -120,6 +140,15 @@ def run(a, c, method):
     rng = np.random.default_rng(c["seed"])
     data = np.load(Path(a.data) / "dataset.npz")
     contacts = load(Path(a.data) / "contacts.json")
+    external = None
+    if method == "external":
+        if not getattr(a, "schedule", None):
+            raise ValueError(
+                "External mixing evaluation requires --schedule pairings.json"
+            )
+        external = load(a.schedule)
+        if len(external) < min(c["rounds"], len(contacts)):
+            raise ValueError("External schedule omits an evaluated contact round")
     device = c["device"]
     n = c["clients"]
 
@@ -177,8 +206,20 @@ def run(a, c, method):
         sigma = np.array([max(np.std(v), 0.01) if v else 0.01 for v in losses_history])
         recovery = np.clip((before - references) / (sigma + 1e-8), 0, 10)
         edges = [tuple(sorted(map(int, e))) for e in contacts[t]]
+        selected_override = (
+            imported_matching(external[t], edges, n) if external is not None else None
+        )
         selected, eligible, debt, novelty, bids = allocation(
-            edges, recovery, age, debt, h, provenance, c, method, rng
+            edges,
+            recovery,
+            age,
+            debt,
+            h,
+            provenance,
+            c,
+            "stair" if method == "external" else method,
+            rng,
+            selected_override=selected_override,
         )
         remaining = max(0, (c["model_byte_budget"] - total_bytes) // payload)
         if len(selected) > remaining:
@@ -308,8 +349,11 @@ def main():
     p.add_argument("--data", default="data/clients")
     p.add_argument("--output", default="runs")
     p.add_argument(
+        "--schedule", help="External per-round capacity-one mixing edge lists JSON"
+    )
+    p.add_argument(
         "--method",
-        choices=["stair", "random", "age", "no_debt", "no_novelty"],
+        choices=["stair", "random", "age", "no_debt", "no_novelty", "external"],
         default="stair",
     )
     a = p.parse_args()

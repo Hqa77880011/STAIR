@@ -22,7 +22,18 @@ def matching(edges, priority):
     return chosen
 
 
-def allocation(edges, recovery, age, debt, usefulness, provenance, c, method, rng):
+def allocation(
+    edges,
+    recovery,
+    age,
+    debt,
+    usefulness,
+    provenance,
+    c,
+    method,
+    rng,
+    selected_override=None,
+):
     eligible = []
     priority = {}
     bids = {}
@@ -59,7 +70,9 @@ def allocation(edges, recovery, age, debt, usefulness, provenance, c, method, rn
         ):
             eligible.append((i, j))
             priority[i, j] = bids[i, j] + bids[j, i]
-    selected = matching(eligible, priority)
+    selected = (
+        matching(eligible, priority) if selected_override is None else selected_override
+    )
     served = {v for e in selected for v in e}
     available = {v for e in eligible for v in e}
     new_debt = debt.copy()

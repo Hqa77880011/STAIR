@@ -156,6 +156,28 @@ assert prepared["clients"] == 2 and np.load(OUT / "leaf.npz")["x"].shape == (8, 
 )
 prepare_contacts.convert(OUT / "raw_contacts.csv", OUT / "binned.json", 3, 3, 1.0)
 assert load(OUT / "binned.json") == [[[0, 1]], [[0, 1], [1, 2]], [[1, 2]]]
+# Import an external allocator's actual pairings; use the same learner/mixer/scorer.
+external_schedule = [[[0, 1], [2, 3]], [[0, 2], [1, 3]]]
+save(OUT / "external_pairings.json", external_schedule)
+external_args = SimpleNamespace(
+    data=a.data,
+    output=str(OUT / "imported"),
+    schedule=str(OUT / "external_pairings.json"),
+)
+external = cli.run(external_args, c, "external")
+assert external["model_bytes"] == 4 * (
+    2 * sum(p.numel() for p in model.parameters()) * 4
+)
+external_trace = load(OUT / "imported/external/trace.json")
+assert [
+    [event["edge"] for event in row["selected"]] for row in external_trace
+] == external_schedule
+try:
+    cli.imported_matching([[0, 1], [1, 2]], [(0, 1), (1, 2)], 4)
+except ValueError as error:
+    assert "capacity-one" in str(error)
+else:
+    raise AssertionError("overlapping external matching accepted")
 print(
     "PASS STAIR: matching/debt hand case, NPZ preparation, finite loss/all gradients/updates, save-load eval equality, 5 train/eval methods, metric aggregation, ResNet18 gradients/reload, LEAF/contact conversion and plots"
 )

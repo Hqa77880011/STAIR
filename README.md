@@ -88,3 +88,13 @@ python scripts/prepare_contacts.py --input data/contact_intervals.csv --output d
 ```
 
 Set `architecture` to `resnet18` in a config to use the larger model. The functional check executes a real ResNet-18 forward/backward/SGD step, checks nonzero finite stem/final-block/classifier gradients, and verifies evaluation output after full state reload. It also reads miniature LEAF-shaped shards and verifies exact contact-bin boundaries. No original FEMNIST or CRAWDAD trace was downloaded or evaluated in this check.
+
+## External mixing-allocation adapter
+
+An actual external scheduler can export one selected undirected edge list per round, e.g. `[[[0,1],[2,3]],[[0,2]]]`. `--method external --schedule` checks every edge against that round's realized contacts, node range, capacity-one matching and byte budget. It then runs the same local optimizer, fixed symmetric mixer, transport model, private validation/test separation, accuracy/P95/harmful-exchange/byte scorer and checkpoint outputs. A selected external edge need not pass STAIR's own bids: consent/eligibility is a property of the external baseline, while missed eligible opportunities are measured using the same STAIR eligibility signals on its resulting states.
+
+```bash
+stair train --config configs/default.json --data data/clients --method external --schedule external_pairings.json --output runs/external_allocator
+```
+
+This is the paper's common allocation interface, not a replacement for D-FedAvg/MATCHA/RelaySum internal optimization or memory states. Original algorithms must export their actual capacity-one allocations for the shared fixed-mixer protocol; algorithms using a different mixing/update state are a different experiment and are not silently approximated by this adapter. The functional check imports explicit fixture pairings, verifies exact consumed bytes and rejects endpoint collisions.
