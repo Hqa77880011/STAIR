@@ -1,9 +1,7 @@
-"""Deferred-sweep-v1 transport for the unchanged authors' RelaySum model core.
+"""Deferred-sweep-v1 transport for the pinned RelaySum model core.
 
-The physical contact clock and the completed RelaySum/SGD clock are explicit.
-Failed attempts consume payload and are retried; they are not silently delivered.
-This is a new declared reproducibility protocol, not the missing original one.
-"""
+Physical contact rounds and completed SGD updates use separate clocks.
+Failed delivery attempts consume payload and are retried."""
 import argparse
 import copy
 from pathlib import Path

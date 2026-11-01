@@ -1,4 +1,4 @@
-"""Diagnostic counterexamples, not an intermittent RelaySum baseline or benchmark."""
+"""Diagnostic cases for RelaySum contact and byte-accounting conventions."""
 
 import importlib.util
 import json

@@ -1,4 +1,4 @@
-"""Small actual-gradient/native-optimizer checks, not benchmark performance."""
+"""Small native-optimizer gradient and persistence checks."""
 
 from pathlib import Path
 import sys

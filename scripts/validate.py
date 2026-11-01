@@ -1,4 +1,4 @@
-"""CPU functional checks; generated images are not paper performance evidence."""
+"""CPU functional checks with generated images."""
 
 from pathlib import Path
 import sys
@@ -104,7 +104,7 @@ restored.load_state_dict(weights[0])
 restored.eval()
 assert torch.isfinite(restored(inp)).all()
 plot(OUT / "comparison.json", OUT / "figures")
-# The published larger architecture is an actual trainable choice, not an alias.
+# ResNet-18 gradient and checkpoint checks.
 resnet = cli.build_model(1, 3, "resnet18")
 resnet.train()
 gray = torch.randn(4, 1, 32, 32)
